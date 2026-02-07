@@ -1,0 +1,156 @@
+# FIREBIRDSCRIPTGENERATOR – Firebird Metadata Script Generator (.NET 8)
+
+Aplikacja konsolowa w .NET 8.0 służąca do generowania skryptów metadanych z bazy danych Firebird 5.0 oraz do budowania i aktualizacji baz danych na ich podstawie.
+
+Projekt został przygotowany jako zadanie rekrutacyjne i realizuje pełny scenariusz testowy opisany w treści zadania.
+
+---
+
+## Wymagania
+
+- .NET SDK 8.0
+- Firebird Server 5.0
+- Narzędzie `gbak` (instalowane razem z Firebirdem)
+- Dowolne narzędzie do zarządzania bazą (np. IBExpert)
+
+---
+
+## Obsługiwany zakres (zgodnie z zakresem uproszczonym)
+
+Aplikacja obsługuje wyłącznie:
+- domeny
+- tabele (z kolumnami)
+- procedury składowane
+
+Nie są obsługiwane:
+- constraints
+- indeksy
+- triggery
+- widoki
+- generatory / sekwencje
+
+---
+
+## Dostępne komendy
+
+```bash
+dotnet run -- build-db --db-dir <katalog_bazy> --scripts-dir <katalog_skryptów>
+dotnet run -- export-scripts --connection-string "<connection_string>" --output-dir <katalog_wyjściowy>
+dotnet run -- update-db --connection-string "<connection_string>" --scripts-dir <katalog_skryptów>
+Opis działania aplikacji
+1. Ręczne utworzenie bazy danych (test początkowy)
+W narzędziu IBExpert ręcznie utworzono bazę danych zawierającą:
+
+domeny (DM_NAME, DM_AGE)
+
+tabelę PERSON
+
+procedurę ADD_PERSON
+
+Pozwala to zweryfikować poprawność eksportu metadanych.
+
+2. Eksport metadanych z bazy danych
+dotnet run -- export-scripts --connection-string "<conn_str>" --output-dir Export
+Generowane są pliki:
+
+01_domains.sql
+
+02_tables.sql
+
+03_procedures.sql
+
+Eksport procedur:
+
+rekonstruuje nagłówki procedur (parametry) na podstawie metadanych
+
+korzysta z RDB$PROCEDURE_SOURCE
+
+obsługuje SET TERM dla poprawnego parsowania BEGIN ... END
+
+3. Budowa nowej bazy danych ze skryptów
+dotnet run -- build-db --db-dir Db2 --scripts-dir Export
+Aplikacja:
+
+tworzy nową bazę Firebird
+
+wykonuje skrypty w odpowiedniej kolejności
+
+tworzy domeny, tabele i procedury
+
+Nowa baza (Db2) jest strukturalnie identyczna z bazą źródłową.
+
+4. Weryfikacja identyczności struktur
+Po ponownym eksporcie skryptów z Db2:
+
+struktury są logicznie identyczne
+
+różnice mogą dotyczyć wyłącznie formatowania
+
+długości VARCHAR są normalizowane do liczby znaków (a nie bajtów) przy charset UTF8
+
+5. Backup bazy danych
+Backup wykonywany jest przy użyciu narzędzia gbak:
+
+"gbak.exe" -b -user SYSDBA -password masterkey database.fdb database_backup.fbk
+Backup jest zapisywany jako plik .fbk.
+
+6. Wprowadzenie zmian w bazie danych
+W bazie źródłowej wprowadzono zmiany:
+
+dodano nową procedurę
+
+zmodyfikowano istniejącą procedurę (dodanie parametru)
+
+rozszerzono tabelę PERSON o nową kolumnę
+
+Zmiany symulują dalszy rozwój systemu.
+
+7. Eksport metadanych po zmianach
+Po zmianach wykonano ponowny eksport:
+
+dotnet run -- export-scripts --connection-string "<conn_str>" --output-dir Export_AfterChanges
+Skrypty zawierają:
+
+nową kolumnę w tabeli
+
+zmodyfikowane procedury
+
+nową procedurę
+
+8. Różnicowa aktualizacja bazy z backupu
+Backup został odtworzony do nowej bazy:
+
+"gbak.exe" -c -user SYSDBA -password masterkey database_backup.fbk database_restored.fdb
+Następnie wykonano aktualizację:
+
+dotnet run -- update-db --connection-string "<conn_str>" --scripts-dir Export_AfterChanges
+Efekt:
+
+istniejące domeny i tabele są wykrywane jako już istniejące
+
+nowe obiekty są dodawane
+
+procedury są aktualizowane przy użyciu CREATE OR ALTER PROCEDURE
+
+brak utraty danych
+
+Ważne informacje i ograniczenia
+Skrypty CREATE DOMAIN i CREATE TABLE nie są idempotentne
+Przy aktualizacji bazy Firebird może zgłaszać błędy „already exists” — są one świadomie ignorowane.
+
+Aktualizacja procedur jest bezpieczna dzięki CREATE OR ALTER PROCEDURE.
+
+Parametry wyjściowe procedur (RETURNS) nie są obsługiwane (zakres uproszczony).
+
+Długości VARCHAR są normalizowane przy eksporcie w kontekście charset UTF8.
+
+Podsumowanie
+Aplikacja realizuje pełny scenariusz:
+
+eksport → build → eksport → backup → zmiany → eksport → update
+
+pozwala na różnicową aktualizację bazy danych
+
+spełnia wszystkie wymagania zadania w zadanym zakresie
+
+Projekt świadomie nie implementuje pełnego silnika migracji (jak Liquibase), skupiając się na prostym i czytelnym mechanizmie DDL.

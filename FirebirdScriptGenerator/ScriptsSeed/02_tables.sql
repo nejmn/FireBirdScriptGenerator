@@ -1,0 +1,4 @@
+CREATE TABLE PERSON (
+    NAME DM_NAME,
+    AGE DM_AGE
+);
